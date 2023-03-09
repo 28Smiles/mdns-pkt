@@ -1,3 +1,4 @@
+use core::fmt::{Display, Error, Formatter, Write};
 use crate::ExtendableBuffer;
 
 /// A DNS name.
@@ -35,6 +36,77 @@ impl<'a> Name<'a> {
         *i = j;
 
         Ok(Self { bytes, offset })
+    }
+}
+
+impl PartialEq<[u8]> for Name<'_> {
+    fn eq(&self, other: &[u8]) -> bool {
+        let mut i = self.offset;
+        let mut depth = 0;
+        let mut j = 0;
+        loop {
+            if depth > 255 {
+                return false;
+            }
+            match LabelType::from_bytes(self.bytes, &mut i).unwrap() {
+                LabelType::Pointer(ptr) => {
+                    i = ptr as usize;
+                }
+                LabelType::Part(len) => {
+                    if len == 0 {
+                        return other.len() == j;
+                    }
+
+                    let part = &self.bytes[i..i + len as usize];
+                    if depth > 0 {
+                        if other[j] == b'.' {
+                            j += 1;
+                        } else {
+                            return false;
+                        }
+                    }
+                    let other = &other[j..j + len as usize];
+                    if part != other {
+                        return false;
+                    }
+                    i += len as usize;
+                    j += len as usize;
+                }
+            }
+
+            depth += 1;
+        }
+    }
+}
+
+impl Display for Name<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        let mut i = self.offset;
+        let mut depth = 0;
+        loop {
+            if depth > 255 {
+                return Err(Error::default());
+            }
+            match LabelType::from_bytes(self.bytes, &mut i).unwrap() {
+                LabelType::Pointer(ptr) => {
+                    i = ptr as usize;
+                }
+                LabelType::Part(len) => {
+                    if len == 0 {
+                        return Ok(());
+                    }
+
+                    let part = &self.bytes[i..i + len as usize];
+                    if depth > 0 {
+                        f.write_char('.')?;
+                    }
+                    f.write_str(core::str::from_utf8(part).unwrap())?;
+                    i += len as usize;
+                }
+            }
+
+            depth += 1;
+        }
     }
 }
 

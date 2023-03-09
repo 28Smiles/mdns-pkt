@@ -58,7 +58,7 @@ mod tests {
         assert_eq!(header.additional_records_count(), 0);
         let mut body = message.body().unwrap();
         let question = body.questions().next().unwrap();
-        //assert_eq!(question.name().unwrap(), Name::new("_airplay._tcp.local").unwrap());
+        assert_eq!(question.name(), b"_airport._tcp.local".as_slice());
         assert_eq!(question.qtype(), QType::A);
         assert_eq!(question.qclass(), QClass::IN);
 
@@ -163,13 +163,13 @@ mod tests {
         let mut body = body.to_answer_section();
         let mut answers = body.answers();
         let answer = answers.next().unwrap();
-        // assert_eq!(answer.name().unwrap(), Name::new("_airplay._tcp.local").unwrap());
+        assert_eq!(answer.name(), b"_airplay._tcp.local".as_slice());
         assert_eq!(answer.atype(), &AType::<Name>::A(u32::from_be_bytes([192, 168, 0, 1])));
         assert_eq!(answer.cache_flush(), false);
         assert_eq!(answer.aclass(), AClass::IN);
         assert_eq!(answer.ttl(), 120);
         let answer = answers.next().unwrap();
-        // assert_eq!(answer.name().unwrap(), Name::new("_airplay._tcp.local").unwrap());
+        assert_eq!(answer.name(), b"_airplay._tcp.local".as_slice());
         assert_eq!(answer.atype(), &AType::<Name>::TXT(&[
             0x00, 0x08,
             0x6d, 0x64, 0x3d, 0x4d, 0x69, 0x6e, 0x69, 0x54,
