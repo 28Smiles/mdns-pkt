@@ -1,6 +1,4 @@
-use crate::builder::answer::type_a::AnswerTypeABuilder;
-use crate::builder::answer::type_ptr::AnswerTypePtrBuilder;
-use crate::{AnswerTypeTxtBuilder, ExtendableBuffer};
+use crate::{AnswerTypeABuilder, AnswerTypePtrBuilder, AnswerTypeSrvBuilder, AnswerTypeTxtBuilder, ExtendableBuffer};
 
 pub struct AnswerTypeBuilder<
     'a,
@@ -48,5 +46,13 @@ impl<
         self.buffer.bytes_mut_at(buffer_pos - 9, 1).unwrap()
             .copy_from_slice(&[16]);
         AnswerTypeTxtBuilder::new(self.buffer, self.parent, self.finalizer)
+    }
+
+    #[inline(always)]
+    pub fn srv(self) -> AnswerTypeSrvBuilder<'a, B, P, O, F, false, false, false, false, > {
+        let buffer_pos = self.buffer.len();
+        self.buffer.bytes_mut_at(buffer_pos - 9, 1).unwrap()
+            .copy_from_slice(&[33]);
+        AnswerTypeSrvBuilder::new(self.buffer, self.parent, self.finalizer)
     }
 }

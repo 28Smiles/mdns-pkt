@@ -2,11 +2,13 @@ mod builder;
 mod type_a;
 mod type_ptr;
 mod type_txt;
+mod type_srv;
 
 pub use builder::*;
 pub use type_a::*;
 pub use type_ptr::*;
 pub use type_txt::*;
+pub use type_srv::*;
 
 use crate::{AClass, ExtendableBuffer, NameBuilder};
 use crate::builder::answer::builder::AnswerTypeBuilder;
