@@ -132,10 +132,7 @@ mod tests {
             0x00, 0x04, // Length
             0xc0, 0xa8, 0x00, 0x01, // IP
             // Answer 1
-            0x08, 0x5f, 0x61, 0x69, 0x72, 0x70, 0x6C, 0x61, 0x79, // _airport
-            0x04, 0x5f, 0x74, 0x63, 0x70, // _tcp
-            0x05, 0x6c, 0x6f, 0x63, 0x61, 0x6c, // local
-            0x00, // Null terminator
+            0xc0, 0x0c, // Pointer to name
             0x00, 0x10, // Type (TXT)
             0x00, 0x01, // Class
             0x00, 0x00, 0x00, 0x78, // TTL
@@ -187,7 +184,7 @@ mod tests {
             0x00, 0x08, // ID
             0b0000_0001, 0b0000_0000, // Flags
             0x00, 0x00, // Question count
-            0x00, 0x02, // Answer count
+            0x00, 0x03, // Answer count
             0x00, 0x00, // Name server count
             0x00, 0x00, // Additional records count
             // Answer 0
@@ -210,6 +207,16 @@ mod tests {
             0x6d, 0x64, 0x3d, 0x4d, 0x69, 0x6e, 0x69, 0x54, // md=MiniT
             0x00, 0x02, // Length of second part
             0x76, 0x3d, // v=1
+            // Answer 2
+            0b1100_0000, 0x0C, // Pointer to _airplay._tcp.local
+            0x00, 0x21, // Type (SRV)
+            0x00, 0x01, // Class
+            0x00, 0x00, 0x00, 0x78, // TTL
+            0x00, 0x08, // Length
+            0x00, 0x00, // Priority
+            0x00, 0x00, // Weight
+            0x1B, 0x58, // Port
+            0b1100_0000, 0x0C, // Pointer to _airplay._tcp.local
         ];
 
         let mut write_buffer = ArrayVec::<u8, 256>::new_const();
@@ -240,7 +247,7 @@ mod tests {
             .aclass(AClass::IN).unwrap()
             .ttl(120).unwrap()
             .finish().unwrap();
-        body.append_answer()
+        let body = body.append_answer()
             .name()
             .label(&name_ptr).unwrap()
             .finish().unwrap().unwrap()
@@ -252,6 +259,23 @@ mod tests {
                 0x00, 0x02,
                 0x76, 0x3d
             ]).unwrap()
+            .finish().unwrap()
+            .cache_flush(false).unwrap()
+            .aclass(AClass::IN).unwrap()
+            .ttl(120).unwrap()
+            .finish().unwrap();
+        body.append_answer()
+            .name()
+            .label(&name_ptr).unwrap()
+            .finish().unwrap().unwrap()
+            .atype()
+            .srv()
+            .priority(0).unwrap()
+            .weight(0).unwrap()
+            .port(7000).unwrap()
+            .name()
+            .label(&name_ptr).unwrap()
+            .finish().unwrap()
             .finish().unwrap()
             .cache_flush(false).unwrap()
             .aclass(AClass::IN).unwrap()

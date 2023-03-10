@@ -58,7 +58,7 @@ impl PartialEq<[u8]> for Name<'_> {
                     }
 
                     let part = &self.bytes[i..i + len as usize];
-                    if depth > 0 {
+                    if j > 0 {
                         if other[j] == b'.' {
                             j += 1;
                         } else {
@@ -123,7 +123,8 @@ impl LabelType {
         let c = bytes[*i];
 
         if c & PTR_MASK == PTR_MASK {
-            let pointer = u16::from_be_bytes([c, bytes[1]]);
+            let c = c & LEN_MASK;
+            let pointer = u16::from_be_bytes([c, bytes[*i + 1]]);
             if pointer > *i as u16 {
                 // Cannot point to the future.
                 return Err(());
@@ -241,6 +242,7 @@ pub struct NameBuilder<'a, B: ExtendableBuffer + ?Sized, P, O, F: Fn(P) -> O> {
 }
 
 impl<'a, B: ExtendableBuffer + ?Sized, P, O, F: Fn(P) -> O> NameBuilder<'a, B, P, O, F> {
+    #[inline(always)]
     pub(crate) fn new(
         buffer: &'a mut B,
         parent: P,
@@ -255,6 +257,7 @@ impl<'a, B: ExtendableBuffer + ?Sized, P, O, F: Fn(P) -> O> NameBuilder<'a, B, P
         }
     }
 
+    #[inline(always)]
     pub fn label<I: NamePart>(mut self, part: I) -> Result<Self, ()> {
         part.to_bytes(self.buffer)?;
         self.last_offset = self.buffer.len();
@@ -262,12 +265,14 @@ impl<'a, B: ExtendableBuffer + ?Sized, P, O, F: Fn(P) -> O> NameBuilder<'a, B, P
         Ok(self)
     }
 
+    #[inline(always)]
     pub fn ptr(&self) -> NamePtr {
         NamePtr {
             offset: self.last_offset,
         }
     }
 
+    #[inline(always)]
     pub fn finish(self) -> Result<O, ()> {
         // If the last label is not a pointer, add a null label.
         let end_of_name = self.buffer.len();
