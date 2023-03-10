@@ -1,4 +1,4 @@
-use crate::{ExtendableBuffer, Name, NameLabel};
+use crate::Name;
 use derive_more::Display;
 
 #[derive(Copy, Clone, Debug, Display, PartialEq)]
@@ -36,31 +36,31 @@ impl From<AClass> for u16 {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum AType<'a, NameType> {
+pub enum AType<'a> {
     /// A host address
     A(u32),
     /// An authoritative name server
-    NS(NameType),
+    NS(Name<'a>),
     /// The canonical name for an alias
-    CNAME(NameType),
+    CNAME(Name<'a>),
     /// Marks the start of a zone of authority
-    SOA(NameType, NameType, u32, u32, u32, u32, u32),
+    SOA(Name<'a>, Name<'a>, u32, u32, u32, u32, u32),
     /// A domain name pointer
-    PTR(NameType),
+    PTR(Name<'a>),
     /// Mail exchange
-    MX(u16, NameType),
+    MX(u16, Name<'a>),
     /// Text strings
     TXT(&'a [u8]),
     /// IPv6 address
     AAAA([u8; 16]),
     /// Location information
-    SRV(u16, u16, u16, NameType),
+    SRV(u16, u16, u16, Name<'a>),
     /// OPT pseudo-RR
     OPT(u16, u8, u8, &'a [u8]),
     /// Unknown
     Unknown,
 }
-impl<'a, NameType> AType<'a, NameType> {
+impl<'a> AType<'a> {
     pub fn type_id(&self) -> Result<u16, ()> {
         match self {
             AType::A(_) => Ok(1),
@@ -76,9 +76,7 @@ impl<'a, NameType> AType<'a, NameType> {
             AType::Unknown => Err(()),
         }
     }
-}
 
-impl<'a> AType<'a, Name<'a>> {
     pub fn parse(atype: u16, data_len: u16, bytes: &'a [u8], i: &mut usize) -> Result<Self, ()> {
         match atype {
             1 => {
@@ -218,167 +216,9 @@ impl<'a> AType<'a, Name<'a>> {
     }
 }
 
-impl<'a> AType<'a, &'a [NameLabel<'a>]> {
-    #[inline(always)]
-    pub(crate) fn to_buffer<B: ExtendableBuffer + ?Sized>(&self, buffer: &mut B) -> Result<(), ()> {
-        match self {
-            AType::A(addr) => {
-                // Write the length of the data.
-                buffer.extend_from_slice(&4u16.to_be_bytes())?;
-                // Write the data.
-                buffer.extend_from_slice(&addr.to_be_bytes())?;
-
-                Ok(())
-            }
-            AType::NS(name) | AType::CNAME(name) => {
-                // Write the length of the data.
-                let mut len = name.iter().map(|label| label.len()).sum::<usize>();
-                if !name.last().unwrap().is_pointer() {
-                    len += 1;
-                }
-                buffer.extend_from_slice(&(len as u16).to_be_bytes())?;
-                // Write the data.
-                for label in name.iter() {
-                    buffer.extend_from_slice(&label.len().to_be_bytes())?;
-                    label.to_buffer(buffer)?;
-                }
-                if !name.last().unwrap().is_pointer() {
-                    buffer.extend_from_slice(&0u8.to_be_bytes())?;
-                }
-
-                Ok(())
-            }
-            AType::SOA(mname, rname, serial, refresh, retry, expire, minimum) => {
-                // Write the length of the data.
-                let mut len = mname.iter().map(|label| label.len()).sum::<usize>();
-                if !mname.last().unwrap().is_pointer() {
-                    len += 1;
-                }
-                len += rname.iter().map(|label| label.len()).sum::<usize>();
-                if !rname.last().unwrap().is_pointer() {
-                    len += 1;
-                }
-                len += 20;
-                buffer.extend_from_slice(&(len as u16).to_be_bytes())?;
-                // Write the data.
-                for label in mname.iter() {
-                    buffer.extend_from_slice(&label.len().to_be_bytes())?;
-                    label.to_buffer(buffer)?;
-                }
-                if !mname.last().unwrap().is_pointer() {
-                    buffer.extend_from_slice(&0u8.to_be_bytes())?;
-                }
-                for label in rname.iter() {
-                    buffer.extend_from_slice(&label.len().to_be_bytes())?;
-                    label.to_buffer(buffer)?;
-                }
-                if !rname.last().unwrap().is_pointer() {
-                    buffer.extend_from_slice(&0u8.to_be_bytes())?;
-                }
-                buffer.extend_from_slice(&serial.to_be_bytes())?;
-                buffer.extend_from_slice(&refresh.to_be_bytes())?;
-                buffer.extend_from_slice(&retry.to_be_bytes())?;
-                buffer.extend_from_slice(&expire.to_be_bytes())?;
-                buffer.extend_from_slice(&minimum.to_be_bytes())?;
-
-                Ok(())
-            }
-            AType::PTR(name) => {
-                // Write the length of the data.
-                let mut len = name.iter().map(|label| label.len()).sum::<usize>();
-                if !name.last().unwrap().is_pointer() {
-                    len += 1;
-                }
-                buffer.extend_from_slice(&(len as u16).to_be_bytes())?;
-                // Write the data.
-                for label in name.iter() {
-                    buffer.extend_from_slice(&label.len().to_be_bytes())?;
-                    label.to_buffer(buffer)?;
-                }
-                if !name.last().unwrap().is_pointer() {
-                    buffer.extend_from_slice(&0u8.to_be_bytes())?;
-                }
-
-                Ok(())
-            }
-            AType::MX(preference, name) => {
-                // Write the length of the data.
-                let mut len = 2;
-                len += name.iter().map(|label| label.len()).sum::<usize>();
-                if !name.last().unwrap().is_pointer() {
-                    len += 1;
-                }
-                buffer.extend_from_slice(&(len as u16).to_be_bytes())?;
-                // Write the data.
-                buffer.extend_from_slice(&preference.to_be_bytes())?;
-                for label in name.iter() {
-                    buffer.extend_from_slice(&label.len().to_be_bytes())?;
-                    label.to_buffer(buffer)?;
-                }
-                if !name.last().unwrap().is_pointer() {
-                    buffer.extend_from_slice(&0u8.to_be_bytes())?;
-                }
-
-                Ok(())
-            }
-            AType::TXT(data) => {
-                // Write the length of the data.
-                buffer.extend_from_slice(&(data.len() as u16).to_be_bytes())?;
-                // Write the data.
-                buffer.extend_from_slice(*data)?;
-
-                Ok(())
-            }
-            AType::AAAA(addr) => {
-                // Write the length of the data.
-                buffer.extend_from_slice(&16u16.to_be_bytes())?;
-                // Write the data.
-                buffer.extend_from_slice(addr)?;
-
-                Ok(())
-            }
-            AType::SRV(priority, weight, port, name) => {
-                // Write the length of the data.
-                let mut len = 6;
-                len += name.iter().map(|label| label.len()).sum::<usize>();
-                if !name.last().unwrap().is_pointer() {
-                    len += 1;
-                }
-                buffer.extend_from_slice(&(len as u16).to_be_bytes())?;
-                // Write the data.
-                buffer.extend_from_slice(&priority.to_be_bytes())?;
-                buffer.extend_from_slice(&weight.to_be_bytes())?;
-                buffer.extend_from_slice(&port.to_be_bytes())?;
-                for label in name.iter() {
-                    buffer.extend_from_slice(&label.len().to_be_bytes())?;
-                    label.to_buffer(buffer)?;
-                }
-                if !name.last().unwrap().is_pointer() {
-                    buffer.extend_from_slice(&0u8.to_be_bytes())?;
-                }
-
-                Ok(())
-            }
-            AType::OPT(udp_payload_size, extended_rcode, version, data) => {
-                // Write the length of the data.
-                let mut len = 4;
-                len += data.len();
-                buffer.extend_from_slice(&(len as u16).to_be_bytes())?;
-                // Write the data.
-                buffer.extend_from_slice(&udp_payload_size.to_be_bytes())?;
-                buffer.extend_from_slice(&((extended_rcode << 4) | version).to_be_bytes())?;
-                buffer.extend_from_slice(*data)?;
-
-                Ok(())
-            }
-            AType::Unknown => Err(()),
-        }
-    }
-}
-
 pub struct Answer<'a> {
     name: Name<'a>,
-    atype: AType<'a, Name<'a>>,
+    atype: AType<'a>,
     cache_flush: bool,
     aclass: AClass,
     ttl: u32,
@@ -413,7 +253,7 @@ impl<'a> Answer<'a> {
     }
 
     #[inline(always)]
-    pub fn atype(&self) -> &AType<'a, Name<'a>> {
+    pub fn atype(&self) -> &AType<'a> {
         &self.atype
     }
 

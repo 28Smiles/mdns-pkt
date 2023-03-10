@@ -6,6 +6,7 @@ mod name;
 mod question;
 mod body;
 mod answer;
+mod builder;
 
 pub use message::*;
 pub use header::*;
@@ -13,6 +14,7 @@ pub use name::*;
 pub use question::*;
 pub use body::*;
 pub use answer::*;
+pub use builder::*;
 
 #[cfg(test)]
 mod tests {
@@ -96,17 +98,16 @@ mod tests {
         header.set_recursion_desired(true);
         header.set_recursion_available(false);
         header.set_response_code(HeaderResponseCode::NoError);
-        let mut body = message.body_mut().unwrap();
-        body.append_question(
-            &[
-                NameLabel::new_part(b"_airplay"),
-                NameLabel::new_part(b"_tcp"),
-                NameLabel::new_part(b"local"),
-            ],
-            QType::A,
-            QClass::IN,
-            true,
-        ).unwrap();
+        let body = message.body_mut().unwrap();
+        body.append_question()
+            .name()
+            .label(b"_airplay").unwrap()
+            .label(b"_tcp").unwrap()
+            .label(b"local").unwrap()
+            .finish().unwrap()
+            .qtype(QType::A).unwrap()
+            .qclass(QClass::IN).unwrap()
+            .finish().unwrap();
 
         assert_eq!(write_buffer.as_slice(), data);
     }
@@ -164,13 +165,13 @@ mod tests {
         let mut answers = body.answers();
         let answer = answers.next().unwrap();
         assert_eq!(answer.name(), b"_airplay._tcp.local".as_slice());
-        assert_eq!(answer.atype(), &AType::<Name>::A(u32::from_be_bytes([192, 168, 0, 1])));
+        assert_eq!(answer.atype(), &AType::A(u32::from_be_bytes([192, 168, 0, 1])));
         assert_eq!(answer.cache_flush(), false);
         assert_eq!(answer.aclass(), AClass::IN);
         assert_eq!(answer.ttl(), 120);
         let answer = answers.next().unwrap();
         assert_eq!(answer.name(), b"_airplay._tcp.local".as_slice());
-        assert_eq!(answer.atype(), &AType::<Name>::TXT(&[
+        assert_eq!(answer.atype(), &AType::TXT(&[
             0x00, 0x08,
             0x6d, 0x64, 0x3d, 0x4d, 0x69, 0x6e, 0x69, 0x54,
             0x00, 0x02,
@@ -190,7 +191,7 @@ mod tests {
             0x00, 0x00, // Name server count
             0x00, 0x00, // Additional records count
             // Answer 0
-            0x08, 0x5f, 0x61, 0x69, 0x72, 0x70, 0x6C, 0x61, 0x79, // _airport
+            0x08, 0x5f, 0x61, 0x69, 0x72, 0x70, 0x6C, 0x61, 0x79, // _airplay
             0x04, 0x5f, 0x74, 0x63, 0x70, // _tcp
             0x05, 0x6c, 0x6f, 0x63, 0x61, 0x6c, // local
             0x00, // Null terminator
@@ -223,34 +224,39 @@ mod tests {
         header.set_recursion_available(false);
         header.set_response_code(HeaderResponseCode::NoError);
         let body = message.body_mut().unwrap();
-        let mut body = body.to_answer_section();
-        body.append_answer(
-            &[
-                NameLabel::new_part(b"_airplay"),
-                NameLabel::new_part(b"_tcp"),
-                NameLabel::new_part(b"local"),
-            ],
-            AType::A(u32::from_be_bytes([192, 168, 0, 1])),
-            false,
-            AClass::IN,
-            120,
-            false,
-        ).unwrap();
-        let answer = body.answers().next().unwrap();
-        let name_ptr = NameLabel::new_pointer(answer.name());
-        body.append_answer(
-            &[name_ptr],
-            AType::TXT(&[
+        let body = body.to_answer_section();
+        let body = body.append_answer().name();
+        let name_ptr = body.ptr();
+        let body = body
+            .label(b"_airplay").unwrap()
+            .label(b"_tcp").unwrap()
+            .label(b"local").unwrap()
+            .finish().unwrap().unwrap()
+            .atype()
+            .a()
+            .ip(&[192, 168, 0, 1]).unwrap()
+            .finish().unwrap()
+            .cache_flush(false).unwrap()
+            .aclass(AClass::IN).unwrap()
+            .ttl(120).unwrap()
+            .finish().unwrap();
+        body.append_answer()
+            .name()
+            .label(&name_ptr).unwrap()
+            .finish().unwrap().unwrap()
+            .atype()
+            .txt()
+            .txt(&[
                 0x00, 0x08,
                 0x6d, 0x64, 0x3d, 0x4d, 0x69, 0x6e, 0x69, 0x54,
                 0x00, 0x02,
                 0x76, 0x3d
-            ]),
-            false,
-            AClass::IN,
-            120,
-            true,
-        ).unwrap();
+            ]).unwrap()
+            .finish().unwrap()
+            .cache_flush(false).unwrap()
+            .aclass(AClass::IN).unwrap()
+            .ttl(120).unwrap()
+            .finish().unwrap();
 
         assert_eq!(write_buffer.as_slice(), data);
     }

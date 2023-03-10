@@ -140,59 +140,142 @@ impl LabelType {
     }
 }
 
-#[derive(Clone)]
-enum NameLabelType<'a> {
-    Pointer(u16),
-    Part(&'a [u8]),
+pub trait NamePart {
+    fn to_bytes<B: ExtendableBuffer + ?Sized>(self, buf: &mut B) -> Result<(), ()>;
 }
 
-#[derive(Clone)]
-pub struct NameLabel<'a> {
-    inner: NameLabelType<'a>,
+pub struct NamePtr {
+    offset: usize,
 }
 
-impl<'a> NameLabel<'a> {
+impl NamePart for NamePtr {
     #[inline(always)]
-    pub const fn new_part(bytes: &'a [u8]) -> Self {
-        Self {
-            inner: NameLabelType::Part(bytes),
-        }
+    fn to_bytes<B: ExtendableBuffer + ?Sized>(self, buf: &mut B) -> Result<(), ()> {
+        (&self).to_bytes(buf)
     }
+}
 
+impl NamePart for &NamePtr {
     #[inline(always)]
-    pub const fn new_pointer(to: &Name) -> Self {
-        Self {
-            inner: NameLabelType::Pointer(to.offset as u16),
-        }
+    fn to_bytes<B: ExtendableBuffer + ?Sized>(self, buf: &mut B) -> Result<(), ()> {
+        let offset = self.offset;
+        let offset = offset as u16;
+        let mut offset = offset.to_be_bytes();
+        offset[0] |= 0b11000000; // Set the pointer bits.
+        buf.extend_from_slice(&offset)
     }
+}
 
+impl NamePart for &[u8] {
     #[inline(always)]
-    pub(crate) fn to_buffer<B: ExtendableBuffer + ?Sized>(&self, buffer: &mut B) -> Result<(), ()> {
-        match &self.inner {
-            NameLabelType::Pointer(ptr) => {
-                let mut bytes = ptr.to_be_bytes();
-                bytes[0] |= 0b11000000;
-                buffer.extend_from_slice(&bytes)?;
-                Ok(())
+    fn to_bytes<B: ExtendableBuffer + ?Sized>(self, buf: &mut B) -> Result<(), ()> {
+        if self.len() > 63 {
+            return Err(());
+        }
+
+        buf.extend_from_slice(&[self.len() as u8])?;
+        buf.extend_from_slice(self)
+    }
+}
+
+impl<const LEN: usize> NamePart for [u8; LEN] {
+    #[inline(always)]
+    fn to_bytes<B: ExtendableBuffer + ?Sized>(self, buf: &mut B) -> Result<(), ()> {
+        (&self).to_bytes(buf)
+    }
+}
+
+impl<const LEN: usize> NamePart for &[u8; LEN] {
+    #[inline(always)]
+    fn to_bytes<B: ExtendableBuffer + ?Sized>(self, buf: &mut B) -> Result<(), ()> {
+        if LEN > 63 {
+            return Err(());
+        }
+
+        buf.extend_from_slice(&[LEN as u8])?;
+        buf.extend_from_slice(self)
+    }
+}
+
+impl<'a> NamePart for Name<'a> {
+    #[inline(always)]
+    fn to_bytes<B: ExtendableBuffer + ?Sized>(self, buf: &mut B) -> Result<(), ()> {
+        (&self).to_bytes(buf)
+    }
+}
+
+impl<'a> NamePart for &Name<'a> {
+    fn to_bytes<B: ExtendableBuffer + ?Sized>(self, buf: &mut B) -> Result<(), ()> {
+        let mut i = self.offset;
+        let mut depth = 0;
+        loop {
+            if depth > 255 {
+                return Err(());
             }
-            NameLabelType::Part(bytes) => {
-                buffer.extend_from_slice(&[bytes.len() as u8])?;
-                buffer.extend_from_slice(bytes)?;
-                Ok(())
+            match LabelType::from_bytes(self.bytes, &mut i).unwrap() {
+                LabelType::Pointer(ptr) => {
+                    i = ptr as usize;
+                }
+                LabelType::Part(len) => {
+                    if len == 0 {
+                        return Ok(());
+                    }
+
+                    let part = &self.bytes[i..i + len as usize];
+                    buf.extend_from_slice(&[len])?;
+                    buf.extend_from_slice(part)?;
+                    i += len as usize;
+                }
             }
+
+            depth += 1;
+        }
+    }
+}
+
+pub struct NameBuilder<'a, B: ExtendableBuffer + ?Sized, P, O, F: Fn(P) -> O> {
+    parent: P,
+    finalizer: F,
+    buffer: &'a mut B,
+    last_offset: usize,
+}
+
+impl<'a, B: ExtendableBuffer + ?Sized, P, O, F: Fn(P) -> O> NameBuilder<'a, B, P, O, F> {
+    pub(crate) fn new(
+        buffer: &'a mut B,
+        parent: P,
+        finalizer: F,
+    ) -> Self {
+        let offset = buffer.len();
+        Self {
+            parent,
+            finalizer,
+            buffer,
+            last_offset: offset,
         }
     }
 
-    #[inline(always)]
-    pub fn is_pointer(&self) -> bool {
-        matches!(self.inner, NameLabelType::Pointer(_))
+    pub fn label<I: NamePart>(mut self, part: I) -> Result<Self, ()> {
+        part.to_bytes(self.buffer)?;
+        self.last_offset = self.buffer.len();
+
+        Ok(self)
     }
 
-    #[inline(always)]
-    pub fn len(&self) -> usize {
-        match &self.inner {
-            NameLabelType::Pointer(_) => 2,
-            NameLabelType::Part(bytes) => 1 + bytes.len(),
+    pub fn ptr(&self) -> NamePtr {
+        NamePtr {
+            offset: self.last_offset,
         }
+    }
+
+    pub fn finish(self) -> Result<O, ()> {
+        // If the last label is not a pointer, add a null label.
+        let end_of_name = self.buffer.len();
+        let last_bytes = &self.buffer.bytes()[end_of_name - 2..end_of_name];
+        if last_bytes[0] & 0b11000000 != 0b11000000 {
+            self.buffer.extend_from_slice(&[0])?;
+        }
+
+        Ok((self.finalizer)(self.parent))
     }
 }
