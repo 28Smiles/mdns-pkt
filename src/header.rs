@@ -217,6 +217,25 @@ impl Header {
     }
 }
 
+impl core::fmt::Debug for Header {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Header")
+            .field("id", &self.id())
+            .field("kind", &self.kind())
+            .field("opcode", &self.opcode())
+            .field("authoritative_answer", &self.authoritative_answer())
+            .field("truncated", &self.truncated())
+            .field("recursion_desired", &self.recursion_desired())
+            .field("recursion_available", &self.recursion_available())
+            .field("response_code", &self.response_code())
+            .field("question_count", &self.question_count())
+            .field("answer_count", &self.answer_count())
+            .field("name_server_count", &self.name_server_count())
+            .field("additional_records_count", &self.additional_records_count())
+            .finish()
+    }
+}
+
 /// The kind of a DNS header.
 #[derive(Copy, Clone, Debug, Display, PartialEq)]
 pub enum HeaderKind {

@@ -113,6 +113,40 @@ mod tests {
     }
 
     #[test]
+    fn mdns_parse_question_malformed_ptr() {
+        let data: &[u8] = &[
+            0x00, 0x08, // ID
+            0b0000_0001, 0b0000_0000, // Flags
+            0x00, 0x01, // Question count
+            0x00, 0x00, // Answer count
+            0x00, 0x00, // Name server count
+            0x00, 0x00, // Additional records count
+            // Question
+            // Name
+            0b1100_0000, 0x14, // Pointer to 20 bytes
+            0x00, 0x01, // Type
+            0x00, 0x01, // Class
+        ];
+
+        let message = Message::new(data).unwrap();
+        let header = message.header().unwrap();
+        assert_eq!(header.id(), 8);
+        assert_eq!(header.kind(), HeaderKind::Query);
+        assert_eq!(header.opcode(), HeaderOpcode::Query);
+        assert_eq!(header.authoritative_answer(), false);
+        assert_eq!(header.truncated(), false);
+        assert_eq!(header.recursion_desired(), true);
+        assert_eq!(header.recursion_available(), false);
+        assert_eq!(header.response_code(), HeaderResponseCode::NoError);
+        assert_eq!(header.question_count(), 1);
+        assert_eq!(header.answer_count(), 0);
+        assert_eq!(header.name_server_count(), 0);
+        assert_eq!(header.additional_records_count(), 0);
+        let mut body = message.body().unwrap();
+        assert_eq!(body.questions().next(), None); // Question is malformed (name is a pointer outside the packet)
+    }
+
+    #[test]
     fn mdns_parse_answer() {
         let data: &[u8] = &[
             0x00, 0x08, // ID

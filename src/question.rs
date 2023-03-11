@@ -1,6 +1,7 @@
 use crate::Name;
 use derive_more::Display;
 
+#[derive(Debug, PartialEq)]
 pub struct Question<'a> {
     name: Name<'a>,
     qtype: QType,
@@ -21,14 +22,17 @@ impl<'a> Question<'a> {
         })
     }
 
+    #[inline(always)]
     pub fn name(&self) -> &Name {
         &self.name
     }
 
+    #[inline(always)]
     pub fn qtype(&self) -> QType {
         self.qtype
     }
 
+    #[inline(always)]
     pub fn qclass(&self) -> QClass {
         self.qclass
     }
@@ -65,56 +69,20 @@ pub enum QType {
 }
 
 impl From<QType> for u16 {
+    #[inline(always)]
     fn from(q: QType) -> Self {
         match q {
-            QType::A => 1,
-            QType::NS => 2,
-            QType::MD => 3,
-            QType::MF => 4,
-            QType::CNAME => 5,
-            QType::SOA => 6,
-            QType::MB => 7,
-            QType::MG => 8,
-            QType::MR => 9,
-            QType::NULL => 10,
-            QType::WKS => 11,
-            QType::PTR => 12,
-            QType::HINFO => 13,
-            QType::MINFO => 14,
-            QType::MX => 15,
-            QType::TXT => 16,
-            QType::AXFR => 252,
-            QType::MAILB => 253,
-            QType::MAILA => 254,
-            QType::ALL => 255,
             QType::Reserved => panic!("Reserved QType"),
+            _ => q as u16,
         }
     }
 }
 
 impl From<u16> for QType {
+    #[inline(always)]
     fn from(n: u16) -> Self {
         match n {
-            1 => QType::A,
-            2 => QType::NS,
-            3 => QType::MD,
-            4 => QType::MF,
-            5 => QType::CNAME,
-            6 => QType::SOA,
-            7 => QType::MB,
-            8 => QType::MG,
-            9 => QType::MR,
-            10 => QType::NULL,
-            11 => QType::WKS,
-            12 => QType::PTR,
-            13 => QType::HINFO,
-            14 => QType::MINFO,
-            15 => QType::MX,
-            16 => QType::TXT,
-            252 => QType::AXFR,
-            253 => QType::MAILB,
-            254 => QType::MAILA,
-            255 => QType::ALL,
+            1..=16 | 252..=255 => unsafe { core::mem::transmute(n) },
             _ => QType::Reserved,
         }
     }
@@ -138,24 +106,20 @@ pub enum QClass {
 }
 
 impl From<QClass> for u16 {
+    #[inline(always)]
     fn from(q: QClass) -> Self {
         match q {
-            QClass::IN => 1,
-            QClass::CS => 2,
-            QClass::CH => 3,
-            QClass::HS => 4,
             QClass::Reserved => panic!("Reserved QClass"),
+            _ => q as u16,
         }
     }
 }
 
 impl From<u16> for QClass {
+    #[inline(always)]
     fn from(n: u16) -> Self {
         match n {
-            1 => QClass::IN,
-            2 => QClass::CS,
-            3 => QClass::CH,
-            4 => QClass::HS,
+            1..=4 => unsafe { core::mem::transmute(n) },
             _ => QClass::Reserved,
         }
     }

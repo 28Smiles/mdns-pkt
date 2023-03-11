@@ -2,7 +2,7 @@ use core::fmt::{Display, Error, Formatter, Write};
 use crate::ExtendableBuffer;
 
 /// A DNS name.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Name<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -50,7 +50,11 @@ impl PartialEq<[u8]> for Name<'_> {
             }
             match LabelType::from_bytes(self.bytes, &mut i).unwrap() {
                 LabelType::Pointer(ptr) => {
-                    i = ptr as usize;
+                    if ptr < self.offset as u16 {
+                        i = ptr as usize;
+                    } else {
+                        return false;
+                    }
                 }
                 LabelType::Part(len) => {
                     if len == 0 {
@@ -79,6 +83,62 @@ impl PartialEq<[u8]> for Name<'_> {
     }
 }
 
+impl PartialEq<Name<'_>> for Name<'_> {
+    fn eq(&self, other: &Name<'_>) -> bool {
+        let mut self_i = self.offset;
+        let mut self_depth = 0;
+        let mut other_i = other.offset;
+        let mut other_depth = 0;
+
+        loop {
+            if self_depth > 255 || other_depth > 255 {
+                return false;
+            }
+
+            match LabelType::from_bytes(self.bytes, &mut self_i).unwrap() {
+                LabelType::Pointer(ptr) => {
+                    if ptr < self.offset as u16 {
+                        self_i = ptr as usize;
+                    } else {
+                        return false;
+                    }
+                }
+                LabelType::Part(len) => {
+                    let part = &self.bytes[self_i..self_i + len as usize];
+                    match LabelType::from_bytes(other.bytes, &mut other_i).unwrap() {
+                        LabelType::Pointer(ptr) => {
+                            if ptr < other.offset as u16 {
+                                other_i = ptr as usize;
+                            } else {
+                                return false;
+                            }
+                        }
+                        LabelType::Part(other_len) => {
+                            if len != other_len {
+                                return false;
+                            }
+                            if len == 0 {
+                                return true;
+                            }
+
+                            let other_part = &other.bytes[other_i..other_i + other_len as usize];
+                            if part != other_part {
+                                return false;
+                            }
+                            other_i += other_len as usize;
+                        }
+                    }
+
+                    self_i += len as usize;
+                }
+            }
+
+            self_depth += 1;
+            other_depth += 1;
+        }
+    }
+}
+
 impl Display for Name<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let mut i = self.offset;
@@ -89,7 +149,12 @@ impl Display for Name<'_> {
             }
             match LabelType::from_bytes(self.bytes, &mut i).unwrap() {
                 LabelType::Pointer(ptr) => {
-                    i = ptr as usize;
+                    if ptr < self.offset as u16 {
+                        i = ptr as usize;
+                    } else {
+                        // Cannot point outside of the message or to itself.
+                        return Err(Error::default());
+                    }
                 }
                 LabelType::Part(len) => {
                     if len == 0 {
@@ -110,6 +175,7 @@ impl Display for Name<'_> {
     }
 }
 
+#[derive(PartialEq)]
 enum LabelType {
     Pointer(u16),
     Part(u8),
@@ -125,7 +191,7 @@ impl LabelType {
         if c & PTR_MASK == PTR_MASK {
             let c = c & LEN_MASK;
             let pointer = u16::from_be_bytes([c, bytes[*i + 1]]);
-            if pointer > *i as u16 {
+            if pointer >= *i as u16 {
                 // Cannot point to the future.
                 return Err(());
             }
