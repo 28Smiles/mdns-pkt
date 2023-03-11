@@ -60,6 +60,9 @@ impl PartialEq<[u8]> for Name<'_> {
                     if len == 0 {
                         return other.len() == j;
                     }
+                    if self.bytes.len() < i + len as usize {
+                        return false;
+                    }
 
                     let part = &self.bytes[i..i + len as usize];
                     if j > 0 {
@@ -68,6 +71,9 @@ impl PartialEq<[u8]> for Name<'_> {
                         } else {
                             return false;
                         }
+                    }
+                    if other.len() < j + len as usize {
+                        return false;
                     }
                     let other = &other[j..j + len as usize];
                     if part != other {
@@ -104,6 +110,9 @@ impl PartialEq<Name<'_>> for Name<'_> {
                     }
                 }
                 LabelType::Part(len) => {
+                    if self.bytes.len() < self_i + len as usize {
+                        return false;
+                    }
                     let part = &self.bytes[self_i..self_i + len as usize];
                     match LabelType::from_bytes(other.bytes, &mut other_i).unwrap() {
                         LabelType::Pointer(ptr) => {
@@ -119,6 +128,9 @@ impl PartialEq<Name<'_>> for Name<'_> {
                             }
                             if len == 0 {
                                 return true;
+                            }
+                            if other.bytes.len() < other_i + other_len as usize {
+                                return false;
                             }
 
                             let other_part = &other.bytes[other_i..other_i + other_len as usize];
@@ -159,6 +171,9 @@ impl Display for Name<'_> {
                 LabelType::Part(len) => {
                     if len == 0 {
                         return Ok(());
+                    }
+                    if self.bytes.len() < i + len as usize {
+                        return Err(Error::default());
                     }
 
                     let part = &self.bytes[i..i + len as usize];
@@ -286,6 +301,10 @@ impl<'a> NamePart for &Name<'a> {
                 LabelType::Part(len) => {
                     if len == 0 {
                         return Ok(());
+                    }
+
+                    if self.bytes.len() < i + len as usize {
+                        return Err(());
                     }
 
                     let part = &self.bytes[i..i + len as usize];
